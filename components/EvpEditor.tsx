@@ -237,6 +237,14 @@ export default function EvpEditor({ sourceUrl, onSave, onClose }: Props) {
           onLoadedMetadata={() => {
             if (audioRef.current) audioRef.current.playbackRate = speed;
           }}
+          onPlay={() => {
+            // iOS leaves an AudioContext created outside the exact tap
+            // that opened this editor in a suspended state — resume it
+            // on the actual play gesture or the routed spectrum (and
+            // the audio itself, once routed through the graph) stays
+            // silent.
+            ctxRef.current?.resume();
+          }}
         />
       )}
 

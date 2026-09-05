@@ -26,11 +26,16 @@ export default function InvestigatorPanel() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      // Safari records MP4/AAC, not WebM — ask for what's actually
+      // supported instead of assuming, and label the Blob with whatever
+      // MediaRecorder actually negotiated.
+      const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"];
+      const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported?.(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         const url = URL.createObjectURL(blob);
         setRecordings((prev) => [{ id: crypto.randomUUID(), url, takenAt: Date.now() }, ...prev]);
         stream.getTracks().forEach((t) => t.stop());
