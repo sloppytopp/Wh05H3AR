@@ -14,7 +14,7 @@ export class SpiritBoxEngine {
   private gateGain: GainNode | null = null;
   private outputGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
-  private sweepInterval: number | null = null;
+  private hopTimeoutId: number | null = null;
   private running = false;
 
   isOpen(): boolean {
@@ -77,29 +77,36 @@ export class SpiritBoxEngine {
     this.analyser = analyser;
     this.running = true;
 
-    // Sweep the bandpass center frequency to simulate scanning across a
-    // band, the way the hardware devices this category imitates do.
+    // Real scanner hardware hops abruptly between frequencies — a
+    // continuous glide (the old Math.sin sweep) reads as a siren, not a
+    // scan. Each hop snaps to a new "station" instantly, with occasional
+    // dead air, so it sounds like rapid tuning instead of one drone.
     const minHz = 300;
-    const maxHz = 3000;
-    let t = 0;
-    this.sweepInterval = window.setInterval(() => {
-      t += 0.12;
-      const hz = minHz + (Math.sin(t) * 0.5 + 0.5) * (maxHz - minHz);
-      sweepFilter.frequency.setTargetAtTime(hz, ctx.currentTime, 0.05);
-      // Clean mode gates the noise floor down between sweep "hits" instead
-      // of leaving a constant static bed under everything.
-      if (cleanMode) {
-        const gateLevel = Math.sin(t * 3) > 0.2 ? 0.55 : 0.12;
-        gateGain.gain.setTargetAtTime(gateLevel, ctx.currentTime, 0.08);
-      }
-    }, 90);
+    const maxHz = 3400;
+
+    const scheduleHop = () => {
+      const hz = minHz + Math.random() * (maxHz - minHz);
+      sweepFilter.frequency.setTargetAtTime(hz, ctx.currentTime, 0.004);
+
+      const isDeadAir = Math.random() < 0.12;
+      const level = isDeadAir
+        ? 0.05
+        : cleanMode
+          ? 0.35 + Math.random() * 0.35
+          : 0.6 + Math.random() * 0.3;
+      gateGain.gain.setTargetAtTime(level, ctx.currentTime, 0.008);
+
+      const delay = 70 + Math.random() * 130;
+      this.hopTimeoutId = window.setTimeout(scheduleHop, delay);
+    };
+    scheduleHop();
   }
 
   // Closes the gate once, tearing everything down. This is the other half
   // of the one-open/one-close session model: no lingering audio nodes.
   close(): void {
     if (!this.running) return;
-    this.sweepInterval !== null && window.clearInterval(this.sweepInterval);
+    this.hopTimeoutId !== null && window.clearTimeout(this.hopTimeoutId);
     this.noiseNode?.stop();
     this.noiseNode?.disconnect();
     this.sweepFilter?.disconnect();
@@ -108,7 +115,7 @@ export class SpiritBoxEngine {
     this.analyser?.disconnect();
     this.ctx?.close();
 
-    this.sweepInterval = null;
+    this.hopTimeoutId = null;
     this.noiseNode = null;
     this.sweepFilter = null;
     this.gateGain = null;
