@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import EvpEditor from "./EvpEditor";
 
-type Recording = { id: string; url: string; takenAt: number };
+type Recording = { id: string; url: string; takenAt: number; edited?: boolean };
 
 // Personal-voice sessions are scoped to audio the user attests they have
 // the right to use — a recording of someone they knew, not a public
@@ -18,6 +19,7 @@ export default function InvestigatorPanel() {
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [consented, setConsented] = useState(false);
   const [recordingUnsupported, setRecordingUnsupported] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -67,9 +69,35 @@ export default function InvestigatorPanel() {
         )}
         <ul className="mt-3 space-y-2 text-xs text-white/60">
           {recordings.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-2">
-              <span>{new Date(r.takenAt).toLocaleTimeString()}</span>
-              <audio controls src={r.url} className="h-8 max-w-[10rem]" />
+            <li key={r.id}>
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  {new Date(r.takenAt).toLocaleTimeString()}
+                  {r.edited && <span className="ml-1 text-signal/70">(edited)</span>}
+                </span>
+                <div className="flex items-center gap-2">
+                  <audio controls src={r.url} className="h-8 max-w-[8rem]" />
+                  <button
+                    onClick={() => setEditingId(editingId === r.id ? null : r.id)}
+                    className="rounded-md border border-edge px-2 py-1 text-[11px] text-white/60 hover:border-veil/60 hover:text-white"
+                  >
+                    {editingId === r.id ? "Close" : "Edit"}
+                  </button>
+                </div>
+              </div>
+              {editingId === r.id && (
+                <EvpEditor
+                  sourceUrl={r.url}
+                  onClose={() => setEditingId(null)}
+                  onSave={(newUrl) =>
+                    setRecordings((prev) =>
+                      prev.map((rec) =>
+                        rec.id === r.id ? { ...rec, url: newUrl, edited: true } : rec
+                      )
+                    )
+                  }
+                />
+              )}
             </li>
           ))}
           {recordings.length === 0 && <li className="text-white/30">No sessions logged yet.</li>}
